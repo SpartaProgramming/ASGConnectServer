@@ -30,14 +30,12 @@ app.add_middleware(
 # ==========================================
 # POPRAWIONA INICJALIZACJA SYSTEMU
 # ==========================================
-# 1. Tworzymy "bazę danych" w pamięci
 state = GameState()
-
-# 2. Tworzymy Menedżera Gry (który korzysta ze stanu)
 game = GameManager(state)
-
-# 3. Tworzymy Handlera MQTT i dajemy mu dostęp DO OBU rzeczy (aby aktualizował mapę i zgłaszał HITy)
 mqtt = MQTTHandler(state, game)
+
+# TUTAJ JEST KLUCZ: Dajemy game managerowi dostęp do radia!
+game.set_mqtt(mqtt)
 
 # (Opcjonalnie) Przykładowa inicjalizacja drużyn
 red_team = Team("RED")
@@ -59,11 +57,33 @@ def startup_event():
 def shutdown_event():
     mqtt.stop()
 
+
 @app.post("/api/game/start")
-async def start_game(config: dict):
-    game.setup_game(config.get("type"), config.get("duration"))
-    asyncio.create_task(game.run_game_loop())
-    return {"status": "started"}
+async def start_game():
+    game.start_game()
+    return {"status": "success", "message": "Gra wystartowała. Tagi odblokowane."}
+
+
+@app.post("/api/game/stop")
+async def stop_game():
+    game.stop_game()
+    return {"status": "success", "message": "Gra zatrzymana. Tagi zablokowane."}
+
+
+@app.post("/api/game/reset")
+async def reset_game():
+    game.reset_game()
+    return {"status": "success", "message": "Zresetowano stan gry."}
+
+
+# Endpoint dla przycisku "Wskrześ" w panelu Vue
+@app.post("/api/game/respawn/{dev_eui}")
+async def respawn_player(dev_eui: str):
+    if dev_eui not in state.players:
+        return {"status": "error", "message": "Nie znaleziono gracza"}
+
+    game.respawn_player(dev_eui)
+    return {"status": "success", "message": f"Wskrzeszono gracza {dev_eui}"}
 
 @app.post("/api/game/assign")
 async def assign_team(data: dict):

@@ -1,49 +1,72 @@
-# backend/core/game_manager.py
-from .models import Player, Team
-from .game_modes import Deathmatch
-
 class GameManager:
-    def __init__(self, state): # <--- DODANO 'state'
-        self.state = state     # <--- ZAPISUJEMY 'state'
-        self.players_pool = {}
-        self.teams = {
-            "RED": Team("RED"),
-            "BLUE": Team("BLUE")
-        }
-        self.active_mode = None
+    def __init__(self, state):
+        self.state = state
+        self.mqtt = None  # Podepniemy to w main.py
+        self.is_running = False
 
+    def set_mqtt(self, mqtt_handler):
+        """Przekazujemy obiekt radia, żeby serwer mógł wysyłać komendy"""
+        self.mqtt = mqtt_handler
 
-    def register_device(self, dev_eui):
-        """Ktoś włączył urządzenie na poligonie - dodajemy go do puli."""
-        if dev_eui not in self.players_pool:
-            self.players_pool[dev_eui] = Player(dev_eui)
+    def start_game(self):
+        self.is_running = True
+        print("🟢 GRA WYSTARTOWAŁA!")
 
-    def assign_to_team(self, dev_eui, team_name):
-        """Przydzielanie gracza do drużyny z zabezpieczeniem (usunięcie z poprzedniej)."""
-        if dev_eui not in self.players_pool:
-            return  # Nie ma takiego urządzenia
+        for dev_eui, player_data in self.state.players.items():
+            # Wszyscy ożywają na start
+            player_data["is_alive"] = True
+            # Wysyłamy fizyczny rozkaz odblokowania do każdego radia
+            if self.mqtt:
+                self.mqtt.send_command(dev_eui, "START")
 
-        player = self.players_pool[dev_eui]
+        self.state.notify_callbacks(self.state.players)
 
-        # 1. Usuń z obecnych drużyn (żeby nie był podwójnym agentem)
-        for t in self.teams.values():
-            t.remove_player(dev_eui)
+    def stop_game(self):
+        self.is_running = False
+        print("🔴 GRA ZATRZYMANA!")
 
-        # 2. Dodaj do nowej drużyny
-        if team_name in self.teams:
-            self.teams[team_name].add_player(player)
+        for dev_eui in self.state.players:
+            # Wysyłamy rozkaz blokady do każdego radia
+            if self.mqtt:
+                self.mqtt.send_command(dev_eui, "STOP")
 
-    def start_game(self, mode_name):
-        """Rozpoczyna wybraną grę."""
-        # Wskrzeszamy wszystkich przed startem
-        for p in self.players_pool.values():
-            p.is_alive = True
+    def reset_game(self):
+        self.stop_game()
+        print("🔄 GRA ZRESETOWANA!")
+        for dev_eui, player_data in self.state.players.items():
+            player_data["is_alive"] = True
 
-        if mode_name == "Deathmatch":
-            self.active_mode = Deathmatch(self.teams)
-            print("[SZTAB] Rozpoczęto Team Deathmatch!")
+        self.state.notify_callbacks(self.state.players)
 
     def report_hit(self, dev_eui):
-        """Odbiera sygnał HIT z radia i przekazuje do logiki gry."""
-        if self.active_mode and self.active_mode.is_running:
-            self.active_mode.process_hit(dev_eui)
+        """Wywoływane przez radio (mqtt_handler.py) gdy wpłynie kod 102"""
+        if not self.is_running:
+            print(f"⚠️ Zignorowano trafienie: {dev_eui} dostał, ale gra nie jest uruchomiona.")
+            return
+
+        player = self.state.players.get(dev_eui)
+
+        # Jeśli gracz istnieje i jest żywy -> zabijamy go
+        if player and player.get("is_alive", True):
+            player["is_alive"] = False
+            print(f"💀 Gracz {dev_eui} został wyeliminowany!")
+
+            # Od razu wysyłamy komendę do taga, żeby zablokował urządzenie/spust
+            if self.mqtt:
+                self.mqtt.send_command(dev_eui, "DEAD")
+
+            # Aktualizujemy mapę na froncie Vue (zmieni kolor taga na szary/czerwony)
+            self.state.notify_callbacks(self.state.players)
+
+    def respawn_player(self, dev_eui):
+        """Wywoływane przez admina z panelu Vue (lub z bazy medycznej)"""
+        player = self.state.players.get(dev_eui)
+        if player and not player.get("is_alive", True):
+            player["is_alive"] = True
+            print(f"⚕️ Gracz {dev_eui} wraca do gry!")
+
+            # Wysyłamy komendę odblokowania do taga
+            if self.mqtt:
+                self.mqtt.send_command(dev_eui, "RESPAWN")
+
+            self.state.notify_callbacks(self.state.players)

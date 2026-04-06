@@ -6,7 +6,11 @@ COMMAND_MAP = {
     "ODWROT": 2,
     "ATAK": 3,
     "ZBIORKA": 4,
-    "PING": 99   # Serwer "szturcha" taga
+    "PING": 99,
+    "START": 10,     # Odblokuj tagi, rozpocznij grę
+    "STOP": 11,      # Zablokuj wszystkie tagi (np. koniec czasu)
+    "DEAD": 12,      # Wymuś zablokowanie taga (gracz oberwał)
+    "RESPAWN": 13    # Odblokuj taga (medyk lub admin przywrócił do gry)
 }
 
 # UPLINK: Tag -> Serwer (co przysyła urządzenie)
