@@ -1,7 +1,36 @@
-BROKER_IP = "10.0.0.72"
+# config.py
+
+# DOWNLINK: Serwer -> Tag (co wysyłamy z Vue)
+COMMAND_MAP = {
+    "WSPARCIE": 1,
+    "ODWROT": 2,
+    "ATAK": 3,
+    "ZBIORKA": 4,
+    "PING": 99   # Serwer "szturcha" taga
+}
+
+# UPLINK: Tag -> Serwer (co przysyła urządzenie)
+UPLINK_MAP = {
+    101: "PING", # Zwykłe zgłoszenie obecności/pozycji
+    102: "HIT",  # Gracz dostał
+    103: "SOS"   # Przykład: gracz wzywa pomoc medyczną
+}
+
+# ==========================================
+# WYBÓR ŚRODOWISKA (Odkomentuj właściwe)
+# ==========================================
+
+# 1. TRYB DOMOWY (Lokalny broker Mosquitto na porcie 1884)
+BROKER_IP = "127.0.0.1"
+BROKER_PORT = 1884
+
+# 2. TRYB POLIGON (Prawdziwy ChirpStack przez WiFi/LAN)
+# BROKER_IP = "10.0.0.72"
+# BROKER_PORT = 1883
+
+# ==========================================
+# KONFIGURACJA MQTT
+# ==========================================
 TOPIC_UP = "application/+/device/+/event/up"
-# Słownik komend z poprzedniej rozmowy
 COMMAND_MAP = {"WSPARCIE": 1, "ODWROT": 2, "ATAK": 3, "ZBIORKA": 4}
-
-USE_MOCK = True
-
+USE_MOCK = False

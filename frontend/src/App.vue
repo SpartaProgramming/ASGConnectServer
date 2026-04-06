@@ -1,7 +1,7 @@
 <template>
   <div class="command-center">
     <header class="top-bar">
-      <h1>Terminal Dowodzenia ASG</h1>
+      <h1>ASGConnect</h1>
       <div class="clock-display">Lokalny czas: <strong>{{ currentTime }}</strong></div>
     </header>
 
@@ -10,9 +10,9 @@
     </div>
 
     <nav class="tabs">
-      <button @click="activeTab = 'map'" :class="{ 'active': activeTab === 'map' }">🗺️ Podgląd mapy</button>
-      <button @click="activeTab = 'tags'" :class="{ 'active': activeTab === 'tags' }">📍 Tagi i Admin</button>
-      <button @click="activeTab = 'game'" :class="{ 'active': activeTab === 'game' }">⚔️ Rozgrywka</button>
+      <button @click="activeTab = 'map'" :class="{ 'active': activeTab === 'map' }">Podgląd mapy</button>
+      <button @click="activeTab = 'tags'" :class="{ 'active': activeTab === 'tags' }">Podłączone TAGI</button>
+      <button @click="activeTab = 'game'" :class="{ 'active': activeTab === 'game' }">Konfiguracja rozgrywki</button>
     </nav>
 
     <main class="tab-content">
@@ -207,7 +207,6 @@ onMounted(() => {
   updateClock()
   clockInterval = setInterval(updateClock, 1000)
 
-  // JEDEN zestaw instrukcji dla WebSocketa
   socket = new WebSocket("ws://127.0.0.1:8000/ws")
 
   socket.onopen = () => {
@@ -216,6 +215,7 @@ onMounted(() => {
 
   socket.onmessage = (event) => {
     const msg = JSON.parse(event.data)
+
     // Obsługa różnych typów wiadomości w jednym miejscu
     if (msg.type === "UPDATE_PLAYERS") {
       players.value = msg.data

@@ -1,55 +1,49 @@
-import asyncio
-import time
-
+# backend/core/game_manager.py
+from .models import Player, Team
+from .game_modes import Deathmatch
 
 class GameManager:
-    def __init__(self, state):
-        self.state = state
-        self.is_running = False
-        self.start_time = None
-        self.game_type = "TDM"  # Domyślnie Team Deathmatch
-        self.duration = 3600  # 1 godzina w sekundach
+    def __init__(self, state): # <--- DODANO 'state'
+        self.state = state     # <--- ZAPISUJEMY 'state'
+        self.players_pool = {}
         self.teams = {
-            "RED": [],
-            "BLUE": []
+            "RED": Team("RED"),
+            "BLUE": Team("BLUE")
         }
-        self.scores = {"RED": 0, "BLUE": 0}
+        self.active_mode = None
 
-    def setup_game(self, game_type, duration):
-        self.game_type = game_type
-        self.duration = duration
-        self.scores = {"RED": 0, "BLUE": 0}
-        print(f"📡 Gra ustawiona: {game_type}, czas: {duration}s")
 
-    def assign_to_team(self, dev_eui, team):
-        # Usuń z innych drużyn i dodaj do wybranej
-        for t in self.teams:
-            if dev_eui in self.teams[t]:
-                self.teams[t].remove(dev_eui)
-        if team in self.teams:
-            self.teams[team].append(dev_eui)
+    def register_device(self, dev_eui):
+        """Ktoś włączył urządzenie na poligonie - dodajemy go do puli."""
+        if dev_eui not in self.players_pool:
+            self.players_pool[dev_eui] = Player(dev_eui)
 
-    async def run_game_loop(self):
-        self.is_running = True
-        self.start_time = time.time()
-        while self.is_running:
-            elapsed = time.time() - self.start_time
-            remaining = max(0, self.duration - elapsed)
+    def assign_to_team(self, dev_eui, team_name):
+        """Przydzielanie gracza do drużyny z zabezpieczeniem (usunięcie z poprzedniej)."""
+        if dev_eui not in self.players_pool:
+            return  # Nie ma takiego urządzenia
 
-            # Wysyłamy status gry do frontendu przez GameState
-            game_status = {
-                "type": "GAME_UPDATE",
-                "data": {
-                    "is_running": self.is_running,
-                    "remaining_time": int(remaining),
-                    "scores": self.scores,
-                    "teams": self.teams,
-                    "game_type": self.game_type
-                }
-            }
-            self.state.notify_callbacks(game_status)
+        player = self.players_pool[dev_eui]
 
-            if remaining <= 0:
-                self.is_running = False
+        # 1. Usuń z obecnych drużyn (żeby nie był podwójnym agentem)
+        for t in self.teams.values():
+            t.remove_player(dev_eui)
 
-            await asyncio.sleep(1)  # Odświeżanie zegara gry co sekundę
+        # 2. Dodaj do nowej drużyny
+        if team_name in self.teams:
+            self.teams[team_name].add_player(player)
+
+    def start_game(self, mode_name):
+        """Rozpoczyna wybraną grę."""
+        # Wskrzeszamy wszystkich przed startem
+        for p in self.players_pool.values():
+            p.is_alive = True
+
+        if mode_name == "Deathmatch":
+            self.active_mode = Deathmatch(self.teams)
+            print("[SZTAB] Rozpoczęto Team Deathmatch!")
+
+    def report_hit(self, dev_eui):
+        """Odbiera sygnał HIT z radia i przekazuje do logiki gry."""
+        if self.active_mode and self.active_mode.is_running:
+            self.active_mode.process_hit(dev_eui)
