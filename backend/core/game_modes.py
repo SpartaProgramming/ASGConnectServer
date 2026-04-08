@@ -1,10 +1,5 @@
-# backend/core/game_modes.py
-
 class Deathmatch:
     def __init__(self, teams):
-        """
-        teams: słownik obiektów Team, np. {"RED": <Team object>, "BLUE": <Team object>}
-        """
         self.name = "Team Deathmatch"
         self.teams = teams
         self.is_running = True

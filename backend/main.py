@@ -10,6 +10,19 @@ from core.models import Player, Team
 from core.game_modes import Deathmatch
 import asyncio
 from pydantic import BaseModel
+import sqlite3
+from datetime import datetime
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+import logging
+from core.database import init_db, save_config_to_db
+
+# Konfiguracja logowania (zrób to raz tutaj, zadziała globalnie)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.FileHandler("server_logs.log"), logging.StreamHandler()]
+)
 
 # Importujemy odpowiedniego Handlera zależnie od konfiguracji
 if config.USE_MOCK:
@@ -17,7 +30,13 @@ if config.USE_MOCK:
 else:
     from core.mqtt_handler import MQTTHandler
 
+
+# Inicjalizacja bazy przy starcie
+init_db()
+
 app = FastAPI()
+
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,20 +46,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==========================================
-# POPRAWIONA INICJALIZACJA SYSTEMU
-# ==========================================
 state = GameState()
 game = GameManager(state)
 mqtt = MQTTHandler(state, game)
 
-# TUTAJ JEST KLUCZ: Dajemy game managerowi dostęp do radia!
 game.set_mqtt(mqtt)
 
-# (Opcjonalnie) Przykładowa inicjalizacja drużyn
+
 red_team = Team("RED")
 blue_team = Team("BLUE")
 current_game = Deathmatch({"RED": red_team, "BLUE": blue_team})
+
+
+class GameSetup(BaseModel):
+    teams: dict
+    type: str = "TDM"
+
+@app.post("/api/game/setup")
+async def setup_game(config: GameSetup):
+    try:
+        logging.info(f"⚙️ Otrzymano nową konfigurację: {config.type}")
+        logging.info(f"🔴 RED: {config.teams.get('RED')}")
+        logging.info(f"🔵 BLUE: {config.teams.get('BLUE')}")
+
+        # 1. Zapis do bazy danych (SQLite)
+        save_config_to_db(config.type, config.teams)
+        logging.info("💾 Konfiguracja zapisana w bazie game_history.db")
+
+        # 2. Inicjalizacja Twojej klasy logiki (np. Deathmatch)
+        # Zakładając, że masz funkcję pomocniczą do budowania obiektów Team
+        teams_objects = {}
+        for team_name, members in config.teams.items():
+            # Tutaj tworzysz obiekty Team z Twojej klasy
+            # teams_objects[team_name] = Team(name=team_name, members=members)
+            pass
+
+        # game_manager.current_match = Deathmatch(teams_objects)
+
+        return {"status": "success", "message": "Konfiguracja załadowana i zapisana."}
+
+    except Exception as e:
+        logging.error(f"❌ Błąd podczas setupu: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class SpoofRequest(BaseModel):
@@ -76,7 +123,6 @@ async def reset_game():
     return {"status": "success", "message": "Zresetowano stan gry."}
 
 
-# Endpoint dla przycisku "Wskrześ" w panelu Vue
 @app.post("/api/game/respawn/{dev_eui}")
 async def respawn_player(dev_eui: str):
     if dev_eui not in state.players:
@@ -85,10 +131,6 @@ async def respawn_player(dev_eui: str):
     game.respawn_player(dev_eui)
     return {"status": "success", "message": f"Wskrzeszono gracza {dev_eui}"}
 
-@app.post("/api/game/assign")
-async def assign_team(data: dict):
-    game.assign_to_team(data["dev_eui"], data["team"])
-    return {"status": "assigned"}
 
 @app.post("/api/spoof")
 async def spoof_player(req: SpoofRequest):
@@ -102,19 +144,6 @@ async def spoof_player(req: SpoofRequest):
 async def get_players():
     return state.players
 
-@app.get("/api/game/status")
-async def get_game_status():
-    return {
-        "is_running": game.is_running,
-        "remaining_time": game.duration,
-        "teams": game.teams,
-        "scores": game.scores,
-        "mode": game.game_type
-    }
-
-# ==========================================
-# WEBSOCKET - Wysyłanie danych do VUE
-# ==========================================
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()

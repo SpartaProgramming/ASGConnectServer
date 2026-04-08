@@ -1,7 +1,7 @@
 <template>
   <div class="command-center">
     <header class="top-bar">
-      <h1>ASGConnect Tactical Suite</h1>
+      <h1>ASGConnect</h1>
       <div class="clock-display">Lokalny czas: <strong>{{ currentTime }}</strong></div>
     </header>
 
@@ -10,9 +10,10 @@
     </div>
 
     <nav class="tabs">
-      <button @click="activeTab = 'map'" :class="{ 'active': activeTab === 'map' }">Podgląd mapy</button>
-      <button @click="activeTab = 'tags'" :class="{ 'active': activeTab === 'tags' }">Status jednostek</button>
-      <button @click="activeTab = 'game'" :class="{ 'active': activeTab === 'game' }">Kontrola operacji</button>
+      <button @click="activeTab = 'map'" :class="{ 'active': activeTab === 'map' }">Mapa</button>
+      <button @click="activeTab = 'tags'" :class="{ 'active': activeTab === 'tags' }">Tagi</button>
+      <button @click="activeTab = 'setup'" :class="{ 'active': activeTab === 'setup' }">Ustawienia Drużyn</button>
+      <button @click="activeTab = 'game'" :class="{ 'active': activeTab === 'game' }">Status Gry</button>
     </nav>
 
     <main class="tab-content">
@@ -72,6 +73,45 @@
         </div>
       </div>
 
+      <div v-if="activeTab === 'setup'" class="tab-pane">
+        <div class="setup-header">
+          <h2>Konfiguracja Drużyn</h2>
+          <div class="setup-actions">
+            <button @click="resetTeams" class="btn-reset">RESETUJ SKŁADY</button>
+            <button @click="saveMatchConfig" class="btn-attack">ZAPISZ I SYNCHRONIZUJ</button>
+          </div>
+        </div>
+
+        <div class="teams-assignment-grid">
+          <div class="assignment-column">
+            <h3>Dostępne Jednostki</h3>
+            <div class="tag-selector-list">
+              <div v-for="(data, id) in players" :key="id" class="tag-assign-card">
+                <span class="tag-id">{{ id }}</span>
+                <div class="assign-buttons">
+                  <button @click="assignToTeam(id, 'RED')" :class="{ 'active-red': tempTeams.RED.includes(id) }">RED</button>
+                  <button @click="assignToTeam(id, 'BLUE')" :class="{ 'active-blue': tempTeams.BLUE.includes(id) }">BLUE</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="team-preview red-theme">
+            <h3>🔴 Drużyna Czerwona ({{ tempTeams.RED.length }})</h3>
+            <div class="assigned-list">
+              <div v-for="id in tempTeams.RED" :key="id" class="mini-chip">{{ id }}</div>
+            </div>
+          </div>
+
+          <div class="team-preview blue-theme">
+            <h3>🔵 Drużyna Niebieska ({{ tempTeams.BLUE.length }})</h3>
+            <div class="assigned-list">
+              <div v-for="id in tempTeams.BLUE" :key="id" class="mini-chip">{{ id }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div v-if="activeTab === 'game'" class="tab-pane">
         <div class="game-management">
 
@@ -125,6 +165,16 @@ const gameStatus = ref({ is_running: false })
 let socket = null
 let clockInterval = null
 
+
+
+const showAssignModal = ref(false)
+const tempTeams = reactive({
+  RED: [],
+  BLUE: []
+})
+
+
+
 // --- STAN SPOOFOWANIA ---
 const showSpoofPanel = ref(false)
 const spoofForm = ref({ dev_eui: '', lat: 0, lon: 0 })
@@ -132,6 +182,15 @@ const spoofForm = ref({ dev_eui: '', lat: 0, lon: 0 })
 // --- COMPUTED ---
 const aliveCount = computed(() => Object.values(players.value).filter(p => p.is_alive).length)
 const deadCount = computed(() => Object.values(players.value).filter(p => !p.is_alive).length)
+
+const redTeamPlayers = computed(() => {
+  return tempTeams.RED.map(eui => ({ id: eui, ...players.value[eui] })) //  { id: "ABC123", is_alive: true, rssi: -70, lat: 51.1, lon: 17.0 }
+})
+
+const blueTeamPlayers = computed(() => {
+  return tempTeams.BLUE.map(eui => ({ id: eui, ...players.value[eui] }))
+})
+
 
 // --- FUNKCJE POMOCNICZE ---
 function updateClock() {
@@ -146,6 +205,27 @@ function startSpoofing(devEui, lat, lon) {
 function cancelSpoof() {
   showSpoofPanel.value = false
 }
+
+
+function openAssignModal() {
+  showAssignModal.value = true
+}
+
+function assignToTeam(devEui, team) {
+  // Usuń z obu list, żeby uniknąć duplikatów
+  tempTeams.RED = tempTeams.RED.filter(id => id !== devEui)
+  tempTeams.BLUE = tempTeams.BLUE.filter(id => id !== devEui)
+
+  // Dodaj do wybranej
+  if (team) tempTeams[team].push(devEui)
+}
+
+function resetTeams() {
+  tempTeams.RED = []
+  tempTeams.BLUE = []
+}
+
+
 
 // --- AKCJE API ---
 const startGame = async () => {
@@ -176,6 +256,24 @@ async function submitSpoof() {
     showSpoofPanel.value = false
   } catch (e) { console.error(e) }
 }
+
+async function saveMatchConfig() {
+  try {
+    await fetch('http://127.0.0.1:8000/api/game/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        teams: tempTeams,
+        type: 'TDM'
+      })
+    })
+    showAssignModal.value = false
+    alert("Konfiguracja zapisana pomyślnie!")
+  } catch (e) {
+    console.error("Błąd zapisu:", e)
+  }
+}
+
 
 // --- CYKL ŻYCIA ---
 onMounted(() => {
@@ -241,4 +339,51 @@ h1 { color: #00ff00; text-transform: uppercase; letter-spacing: 2px; }
 .stat-card .value { font-size: 3rem; font-weight: bold; margin-top: 10px; }
 
 .mt-20 { margin-top: 20px; }
+
+
+
+.teams-assignment-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.tag-assign-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1a1a1a;
+  padding: 10px;
+  margin-bottom: 5px;
+  border: 1px solid #333;
+}
+
+.assign-buttons button {
+  padding: 5px 15px;
+  margin-left: 5px;
+  cursor: pointer;
+  background: #222;
+  border: 1px solid #444;
+  color: #888;
+}
+
+.active-red { background: #8b0000 !important; color: white !important; border-color: #ff4444 !important; }
+.active-blue { background: #00008b !important; color: white !important; border-color: #4444ff !important; }
+
+.mini-chip {
+  background: #222;
+  padding: 5px 10px;
+  border-radius: 4px;
+  margin: 2px;
+  display: inline-block;
+  font-size: 0.8rem;
+}
+
+.team-preview { background: #0f0f0f; border: 1px solid #333; padding: 15px; border-radius: 4px; }
+.red-theme { border-top: 4px solid #ff4444; }
+.blue-theme { border-top: 4px solid #4444ff; }
+
+
+
 </style>

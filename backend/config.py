@@ -1,6 +1,6 @@
 # config.py
 
-# DOWNLINK: Serwer -> Tag (co wysyłamy z Vue)
+# DOWNLINK: Serwer -> Tag
 COMMAND_MAP = {
     "WSPARCIE": 1,
     "ODWROT": 2,
@@ -36,5 +36,4 @@ BROKER_PORT = 1884
 # KONFIGURACJA MQTT
 # ==========================================
 TOPIC_UP = "application/+/device/+/event/up"
-COMMAND_MAP = {"WSPARCIE": 1, "ODWROT": 2, "ATAK": 3, "ZBIORKA": 4}
 USE_MOCK = False
