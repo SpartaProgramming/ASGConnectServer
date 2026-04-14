@@ -6,6 +6,7 @@ class GameManager:
         self.state = state
         self.mqtt = None
         self.is_running = False
+        self.current_match = None # obiekt Rozgrywki
 
     def set_mqtt(self, mqtt_handler):
         self.mqtt = mqtt_handler
@@ -39,21 +40,34 @@ class GameManager:
 
         self.state.notify_callbacks(self.state.players)
 
-    def report_hit(self, dev_eui):
-            if not self.is_running:
-                logging.warning(f"Zignorowano trafienie {dev_eui} - gra nie trwa.")
-                return
+    def report_hit(self, victim_eui):
+        """Metoda wywoływana przez MQTT Handler"""
+        if not self.is_running:
+            logging.warning(f"Gra nie trwa, trafienie {victim_eui} zignorowane.")
+            return
 
-            player = self.state.players.get(dev_eui)
-            if player and player.get("is_alive", True):
-                player["is_alive"] = False
-                logging.info(f"💀 TRAFIENIE: {dev_eui} wyeliminowany.")
+        logging.info(f"💥 [RADIO] Trafienie od: {victim_eui}")
 
-                # Zapis do bazy danych
-                log_hit_to_db(dev_eui)
+        # 1. Przekaż trafienie do logiki Deathmatch
+        if self.current_match:
+            hit_successful = self.current_match.process_hit(victim_eui)
 
+            if hit_successful:
+                # 2. Zapisz do bazy danych
+                log_hit_to_db(victim_eui)
+
+                # 3. Zaktualizuj stan ogólny dla Frontendu
+                if victim_eui in self.state.players:
+                    self.state.players[victim_eui]["is_alive"] = False
+
+                # 4. Wyślij rozkaz DEAD do taga
                 if self.mqtt:
-                    self.mqtt.send_command(dev_eui, "DEAD")
+                    self.mqtt.send_command(victim_eui, "DEAD")
+
+                # 5. Sprawdź czy gra się skończyła w obiekcie Deathmatch
+                if not self.current_match.is_running:
+                    self.stop_game()
+                    logging.info("🏆 KONIEC GRY - Wykryto zwycięzcę!")
 
                 self.state.notify_callbacks(self.state.players)
 

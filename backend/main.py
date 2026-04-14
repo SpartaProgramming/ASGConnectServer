@@ -73,15 +73,19 @@ async def setup_game(config: GameSetup):
         save_config_to_db(config.type, config.teams)
         logging.info("💾 Konfiguracja zapisana w bazie game_history.db")
 
-        # 2. Inicjalizacja Twojej klasy logiki (np. Deathmatch)
-        # Zakładając, że masz funkcję pomocniczą do budowania obiektów Team
-        teams_objects = {}
-        for team_name, members in config.teams.items():
-            # Tutaj tworzysz obiekty Team z Twojej klasy
-            # teams_objects[team_name] = Team(name=team_name, members=members)
-            pass
+        # 2. Tworzymy struktury dla klasy Deathmatch
+        teams_map = {}
+        for team_name, members_euis in config.teams.items():
+            # Tworzymy obiekt Team (zakładając że masz taką klasę w core.models)
+            t = Team(team_name)
+            for eui in members_euis:
+                # Tworzymy obiekt Player
+                p = Player(eui)
+                t.members[eui] = p
+            teams_map[team_name] = t
 
-        # game_manager.current_match = Deathmatch(teams_objects)
+        # Wrzucamy gotowy obiekt do Managera
+        game.current_match = Deathmatch(teams_map)
 
         return {"status": "success", "message": "Konfiguracja załadowana i zapisana."}
 
