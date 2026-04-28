@@ -1,0 +1,185 @@
+# Założenia Systemu ASGConnect (Airsoft Game Connect)
+
+## Opis Ogólny
+ASGConnect to system zarządzania grami airsoft w czasie rzeczywistym, wykorzystujący urządzenia LoRaWAN (tagi). Backend (Python) obsługuje MQTT z ChirpStack, zarządza sesjami gry i automatycznie rejestruje graczy. Frontend (Vue.js) zapewnia dashboard dla sędziów. Kluczowe założenia: brak STOPU rozgrywki, cykliczne wysyłanie lokalizacji, serwer jako Single Source of Truth z Digital Twin.
+
+## Etapy Gry
+1. **Przygotowanie**: Konfiguracja gry na serwerze (przypisywanie drużyn, nicków, czasu, trybu). Wyświetla: "KONFIGUROWANIE". Ustawia Game Status. *Confirmed*.
+2. **Czekaj na Gotowość**: Potwierdź READY z każdego taga. Komunikat o gotowości.
+3. **Gra**: Odliczanie czasu, aktualizacja ilości graczy, wysyłanie lokalizacji. Rozpoczyna się komendą START z serwera.
+4. **Koniec**: Awaryjne zatrzymanie, WIN/LOSE, koniec czasu. Wyświetla komunikat końcowy.
+
+## Tryb Gracza
+- **Alive**: Żyje, gra.
+- **Dead**: Wyeliminowany.
+
+## Struktura Game Data (Aktualizowana Ramkami Opcodes)
+```json
+{
+  "czas_do_konca": int,
+  "druzyna_gracza": int,  // 0: RED, 1: BLUE
+  "nick_gracza": string,
+  "ilos_swoich": int,
+  "ilosc_przeciwnikow": int,
+  "przeciwnikow_total": int,
+  "swoich_total": int,
+  "pozycja_gracza": {"lat": float, "lon": float},
+  "tryb_gry": "deadmatch"
+}
+```
+
+## Założenia Techniczne
+- Brak STOPU rozgrywki (tylko START i KONIEC).
+- Lokalizacja wysyłana cyklicznie (co 10 sekund, jeśli zmieni się o próg).
+- Serwer ma Digital Twin: Przywraca stan tagowi w razie utraty połączenia (komenda SYNC).
+- Thin-client: Tagi są lekkimi klientami, serwer zarządza stanem.
+
+## Protokoły Komunikacji (MQTT)
+
+### Tematy
+- **Uplink**: `application/{app_id}/device/{dev_eui}/event/up` – Dane PHY LoRa + aplikacyjne.
+- **Downlink**: `application/{app_id}/device/{dev_eui}/command/down` – Komendy do tagów.
+
+### Przykład Payload Uplink (ChirpStack)
+```json
+{
+  "applicationId": "2",
+  "applicationName": "my-app",
+  "deviceName": "my-node",
+  "devEui": "0102030405060708",
+  "rxInfo": [
+    {
+      "gatewayId": "b827ebfffedcba98",
+      "rssi": -57,
+      "snr": 10.5,
+      "location": {
+        "latitude": 52.1,
+        "longitude": 21.0,
+        "altitude": 120
+      }
+    }
+  ],
+  "txInfo": {
+    "frequency": 868300000,
+    "dr": 5
+  },
+  "adr": true,
+  "fCnt": 123,
+  "fPort": 10,
+  "data": "BASE64_PAYLOAD",
+  "object": {
+    "temperature": 21.5,
+    "humidity": 40
+  }
+}
+```
+
+### Przykład Payload Downlink
+```json
+{
+  "devEui": "0102030405060708",
+  "confirmed": true,
+  "fPort": 10,
+  "data": "BASE64_PAYLOAD",
+  "object": {
+    "led": true,
+    "threshold": 25
+  }
+}
+```
+
+## Opcodes (Komendy)
+
+### Downlink (Serwer → Tag)
+- `0x01` - CONFIG: Drużyna, nick, czas, tryb, ilość graczy (swoich/przeciwników). Wysyłane na początku lub zmianie.
+- `0x02` - COMMAND: START, KONIEC, WIN_BLUE/RED, DIE, zmiana trybu.
+- `0x03` - UPDATE: Ile swoich/przeciwników żywych.
+
+### Uplink (Tag → Serwer)
+- `0x01` - TELEMETRY: Pozycja GPS, bateria (jeśli zmieni się o próg).
+- `0x02` - KILLED: Zdarzenie zabicia.
+- `0x03` - PING: Co 20s, tag żyje/w zasięgu.
+
+### Przykład Komend JSON
+- CONFIG:
+```json
+{
+  "cmd": "CONFIG",
+  "team": 1,
+  "gameType": 0,
+  "timeMinutes": 30,
+  "alliesTotal": 12,
+  "enemiesTotal": 12,
+  "nickname": "GROM"
+}
+```
+- COMMAND:
+```json
+{
+  "cmd": "COMMAND",
+  "val": "START"
+}
+```
+- UPDATE:
+```json
+{
+  "cmd": "UPDATE",
+  "alliesAlive": 8,
+  "enemiesAlive": 5
+}
+```
+- COMMAND DIE:
+```json
+{
+  "cmd": "COMMAND",
+  "val": "DIE"
+}
+```
+- COMMAND WIN:
+```json
+{
+  "cmd": "COMMAND",
+  "val": "WIN_BLUE"
+}
+```
+
+## Funkcjonalność TAG (Urządzenie)
+- Odliczanie czasu w dół.
+- Aktualizacja wyświetlacza (czas, RSSI, lokalizacja).
+- Aktualizacja stanu gry z ramek.
+- Odczyt lokalizacji, obsługa LoRa, odczyt przycisków.
+- Wysyłanie: TELEMETRY (co 10s), KILLED (przycisk), PING (co 20s).
+
+## Funkcjonalność Serwer
+1. Przypisanie tagów do drużyn, nadanie nicków dla ID.
+2. Wybór trybu gry, ustawienie parametrów, koniec konfiguracji.
+3. Czekaj na READY od tagów.
+4. START: Odliczaj, loop(), komunikuj statystyki, odbieraj zabicia.
+5. Zakończ: Wyślij komendy.
+
+## Klasy i Struktury Danych
+
+### DeviceTag
+- devEUI: Powiązany z płytką.
+- Status połączenia, metryki pakietów, LastSeen, StanBaterii, QueueStatus.
+- Fizyczne urządzenie końcowe.
+
+### PlayerProfile
+- Unique ID, Nickname, Team, Status w grze, Rank, Role.
+- Lokalizacja, statystyki (trafienia, dystans).
+- Wskaźnik do DeviceTag.
+
+### ActivePlayer
+- Manipulowany przez serwer: {device, profile, team, status, location, alive}.
+- Przechowywany w Digital Twin.
+- Wysyłany na żądanie synchronizacji (np. po awarii taga).
+
+### GameDefinition
+- Typ gry, czas trwania rundy.
+
+### GameSession
+- {GameDefinition, players{}, time, scoreBoard}.
+- Wysyła inicjalizację, processEvent(), broadcastState().
+
+## Digital Twin
+- W razie utraty połączenia/wyłączenia: Komenda SYNC przywraca dane tagowi.
