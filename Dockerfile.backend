@@ -1,0 +1,22 @@
+FROM python:3.10-slim # oficjalny obraz Pythona 3.10 w wersji slim
+
+WORKDIR /app #tworzy folder i w nim pracuje
+
+# Zainstaluj zależności
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Skopiuj requirements i zainstaluj Python zależności
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Skopiuj kod backendu do folderu /app w kontenerze
+COPY backend/ .
+
+# Expose portu dla web serwera
+EXPOSE 8000
+
+# Uruchom web_server, wykona się raz po uruchomieniu kontenera
+CMD ["python", "web_server.py"]
+

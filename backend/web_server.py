@@ -276,7 +276,7 @@ async def main():
 
     # Uruchom serwer web
     print("[APP] Uruchamianie serwera webowego...")
-    config = uvicorn.Config(app, host="127.0.0.1", port=8000, log_level="info")
+    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info") # słucha ruch przychodzący z sieci Dockera,
     server = uvicorn.Server(config)
     await server.serve()
 

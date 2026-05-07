@@ -8,195 +8,158 @@
     <div class="connection-status" :class="{ 'connected': isConnected }">
       Status serwera: {{ isConnected ? 'ONLINE' : 'OFFLINE' }}
     </div>
+    <div class="game-status">
+      Stan Gry: {{ gameStatus }} | Czas: {{ formatTime(gameTimeLeft) }}
+    </div>
 
     <nav class="tabs">
       <button @click="activeTab = 'map'" :class="{ 'active': activeTab === 'map' }">Mapa</button>
+      <button @click="activeTab = 'profile'" :class="{ 'active': activeTab === 'profile' }">Profile</button>
       <button @click="activeTab = 'tags'" :class="{ 'active': activeTab === 'tags' }">Tagi</button>
-      <button @click="activeTab = 'setup'" :class="{ 'active': activeTab === 'setup' }">Ustawienia Drużyn</button>
-      <button @click="activeTab = 'game'" :class="{ 'active': activeTab === 'game' }">Status Gry</button>
+      <button @click="activeTab = 'config'" :class="{ 'active': activeTab === 'config' }">Konfiguracja</button>
     </nav>
 
     <main class="tab-content">
-
       <div v-if="activeTab === 'map'" class="tab-pane no-padding">
         <TacticalMap :players="players" :isActive="activeTab === 'map'" />
       </div>
 
+      <div v-if="activeTab === 'profile'" class="tab-pane">
+        <h2>Profile Graczy</h2>
+        <ProfileTab
+          :profiles="profiles"
+          @add-profile="showAddProfile = true"
+          @edit-profile="editProfile"
+          @delete-profile="deleteProfile"
+        />
+      </div>
+
       <div v-if="activeTab === 'tags'" class="tab-pane">
-        <div class="tags-layout">
-          <div class="tags-table-wrapper">
-            <h2>Status Urządzeń w Terenie</h2>
-            <table class="tactical-table">
-              <thead>
-              <tr>
-                <th>ID (DevEUI)</th>
-                <th>Status</th>
-                <th>Sygnał</th>
-                <th>Akcje</th>
-              </tr>
-              </thead>
-              <tbody>
-              <tr v-for="(data, devEui) in players" :key="devEui" :class="{ 'dead-row': !data.is_alive }">
-                <td class="player-id">{{ devEui }}</td>
-                <td>
-                  <span :class="data.is_alive ? 'status-alive' : 'status-dead'">
-                    {{ data.is_alive ? 'AKTYWNY' : 'WYELIMINOWANY' }}
-                  </span>
-                </td>
-                <td>{{ data.rssi }} dBm</td>
-                <td>
-                  <button v-if="!data.is_alive" @click="respawnPlayer(devEui)" class="btn-respawn">WSKRZEŚ</button>
-                  <button @click="startSpoofing(devEui, data.lat, data.lon)" class="btn-spoof">SPOOF</button>
-                </td>
-              </tr>
-              <tr v-if="Object.keys(players).length === 0">
-                <td colspan="4">Brak aktywnych jednostek...</td>
-              </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div v-if="showSpoofPanel" class="admin-panel spoof-pane">
-            <h2>GPS Spoofing</h2>
-            <div class="spoof-form">
-              <label>Urządzenie: <strong class="player-id">{{ spoofForm.dev_eui }}</strong></label>
-              <div class="input-group">
-                <input v-model.number="spoofForm.lat" type="number" step="0.0001" placeholder="Lat">
-                <input v-model.number="spoofForm.lon" type="number" step="0.0001" placeholder="Lon">
-              </div>
-              <div class="action-group">
-                <button @click="submitSpoof" class="btn-attack">WYŚLIJ POZYCJĘ</button>
-                <button @click="cancelSpoof" class="btn-close">Anuluj</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <TagsTab
+          :players="players"
+          :show-spoof-panel="showSpoofPanel"
+          :spoof-form="spoofForm"
+          @spoof="startSpoofing"
+          @submit-spoof="submitSpoof"
+          @cancel-spoof="cancelSpoof"
+        />
       </div>
 
-      <div v-if="activeTab === 'setup'" class="tab-pane">
-        <div class="setup-header">
-          <h2>Konfiguracja Drużyn</h2>
-          <div class="setup-actions">
-            <button @click="resetTeams" class="btn-reset">RESETUJ SKŁADY</button>
-            <button @click="saveMatchConfig" class="btn-attack">ZAPISZ I SYNCHRONIZUJ</button>
-          </div>
-        </div>
-
-        <div class="teams-assignment-grid">
-          <div class="assignment-column">
-            <h3>Dostępne Jednostki</h3>
-            <div class="tag-selector-list">
-              <div v-for="(data, id) in players" :key="id" class="tag-assign-card">
-                <span class="tag-id">{{ id }}</span>
-                <div class="assign-buttons">
-                  <button @click="assignToTeam(id, 'RED')" :class="{ 'active-red': tempTeams.RED.includes(id) }">RED</button>
-                  <button @click="assignToTeam(id, 'BLUE')" :class="{ 'active-blue': tempTeams.BLUE.includes(id) }">BLUE</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="team-preview red-theme">
-            <h3>🔴 Drużyna Czerwona ({{ tempTeams.RED.length }})</h3>
-            <div class="assigned-list">
-              <div v-for="id in tempTeams.RED" :key="id" class="mini-chip">{{ id }}</div>
-            </div>
-          </div>
-
-          <div class="team-preview blue-theme">
-            <h3>🔵 Drużyna Niebieska ({{ tempTeams.BLUE.length }})</h3>
-            <div class="assigned-list">
-              <div v-for="id in tempTeams.BLUE" :key="id" class="mini-chip">{{ id }}</div>
-            </div>
-          </div>
-        </div>
+      <div v-if="activeTab === 'config'" class="tab-pane">
+        <h2>Konfiguracja</h2>
+        <ConfigTab
+          :players="players"
+          :profiles="profiles"
+          :profile-assignments="profileAssignments"
+          :team-assignments="teamAssignments"
+          :session-form="sessionForm"
+          @assign-profile-team="assignProfileAndTeam"
+          @set-game-mode="setGameMode"
+          @start-game="startGame"
+          @stop-game="stopGame"
+          @reset-game="resetGame"
+        />
       </div>
-
-      <div v-if="activeTab === 'game'" class="tab-pane">
-        <div class="game-management">
-
-          <section class="admin-panel shadow">
-            <h2>⚙️ Kontrola Systemu Walki</h2>
-            <div class="setup-row main-controls">
-              <div class="status-box" :class="{ 'active': gameStatus.is_running }">
-                {{ gameStatus.is_running ? 'OPERACJA W TOKU' : 'SYSTEM WSTRZYMANY' }}
-              </div>
-
-              <div class="btn-group">
-                <button v-if="!gameStatus.is_running" @click="startGame" class="btn-attack large">START MISJI</button>
-                <button v-else @click="stopGame" class="btn-stop large">STOP (FREEZE)</button>
-                <button @click="resetGame" class="btn-reset">RESET GLOBALNY</button>
-              </div>
-            </div>
-          </section>
-
-          <section class="admin-panel shadow mt-20">
-            <h2>📊 Statystyki Deadmatch</h2>
-            <div class="stats-grid">
-              <div class="stat-card">
-                <label>Aktywne jednostki</label>
-                <div class="value">{{ aliveCount }}</div>
-              </div>
-              <div class="stat-card red">
-                <label>Straty (KIA)</label>
-                <div class="value">{{ deadCount }}</div>
-              </div>
-            </div>
-          </section>
-
-        </div>
-      </div>
-
     </main>
+
+    <ProfileModal
+      :show="showAddProfile || editingProfile"
+      :editing-id="currentEditingId"
+      :form="profileForm"
+      @save="saveProfile"
+      @cancel="cancelProfile"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import TacticalMap from './components/TacticalMap.vue'
+import ProfileTab from './components/ProfileTab.vue'
+import TagsTab from './components/TagsTab.vue'
+import ConfigTab from './components/ConfigTab.vue'
+import ProfileModal from './components/ProfileModal.vue'
 
 // --- STAN APLIKACJI ---
 const players = ref({})
 const isConnected = ref(false)
-const activeTab = ref('game')
+const activeTab = ref('tags')
 const currentTime = ref('')
-const gameStatus = ref({ is_running: false })
+const gameStatus = ref('configuration')
+const gameTimeLeft = ref(0)
 
 let socket = null
 let clockInterval = null
-
-
-
-const showAssignModal = ref(false)
-const tempTeams = reactive({
-  RED: [],
-  BLUE: []
-})
-
-
+let gameTimer = null
 
 // --- STAN SPOOFOWANIA ---
 const showSpoofPanel = ref(false)
 const spoofForm = ref({ dev_eui: '', lat: 0, lon: 0 })
 
-// --- COMPUTED ---
-const aliveCount = computed(() => Object.values(players.value).filter(p => p.is_alive).length)
-const deadCount = computed(() => Object.values(players.value).filter(p => !p.is_alive).length)
-
-const redTeamPlayers = computed(() => {
-  return tempTeams.RED.map(eui => ({ id: eui, ...players.value[eui] })) //  { id: "ABC123", is_alive: true, rssi: -70, lat: 51.1, lon: 17.0 }
-})
-
-const blueTeamPlayers = computed(() => {
-  return tempTeams.BLUE.map(eui => ({ id: eui, ...players.value[eui] }))
-})
-
+// --- STAN PROFILI ---
+const profiles = ref({})
+const showAddProfile = ref(false)
+const editingProfile = ref(false)
+const currentEditingId = ref(null)
+const profileForm = ref({ nick: '', role: '' })
+const sessionForm = ref({ mode_id: '1', time_mins: 60 })
+const teamAssignments = ref({})
+const profileAssignments = ref({})
 
 // --- FUNKCJE POMOCNICZE ---
 function updateClock() {
   currentTime.value = new Date().toLocaleTimeString('pl-PL')
 }
 
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+// --- FUNKCJE PROFILI ---
+async function fetchProfiles() {
+  try {
+    const res = await fetch('http://127.0.0.1:8000/api/profiles')
+    profiles.value = await res.json()
+  } catch (e) { console.error(e) }
+}
+
+function editProfile(id) {
+  currentEditingId.value = id
+  editingProfile.value = true
+  profileForm.value = { ...profiles.value[id] }
+}
+
+async function deleteProfile(id) {
+  try {
+    await fetch(`http://127.0.0.1:8000/api/profiles/${id}`, { method: 'DELETE' })
+    await fetchProfiles()
+  } catch (e) { console.error(e) }
+}
+
+function cancelProfile() {
+  showAddProfile.value = false
+  editingProfile.value = false
+  currentEditingId.value = null
+  profileForm.value = { nick: '', role: '' }
+}
+
+async function saveProfile() {
+  const method = currentEditingId.value ? 'PUT' : 'POST'
+  const url = currentEditingId.value ? `http://127.0.0.1:8000/api/profiles/${currentEditingId.value}` : 'http://127.0.0.1:8000/api/profiles'
+  try {
+    await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileForm.value)
+    })
+    await fetchProfiles()
+    cancelProfile()
+  } catch (e) { console.error(e) }
+}
+
+// --- FUNKCJE SPOOFOWANIA ---
 function startSpoofing(devEui, lat, lon) {
   showSpoofPanel.value = true
   spoofForm.value = { dev_eui: devEui, lat, lon }
@@ -205,46 +168,6 @@ function startSpoofing(devEui, lat, lon) {
 function cancelSpoof() {
   showSpoofPanel.value = false
 }
-
-
-function openAssignModal() {
-  showAssignModal.value = true
-}
-
-function assignToTeam(devEui, team) {
-  // Usuń z obu list, żeby uniknąć duplikatów
-  tempTeams.RED = tempTeams.RED.filter(id => id !== devEui)
-  tempTeams.BLUE = tempTeams.BLUE.filter(id => id !== devEui)
-
-  // Dodaj do wybranej
-  if (team) tempTeams[team].push(devEui)
-}
-
-function resetTeams() {
-  tempTeams.RED = []
-  tempTeams.BLUE = []
-}
-
-
-
-// --- AKCJE API ---
-const startGame = async () => {
-  await fetch('http://127.0.0.1:8000/api/game/start', { method: 'POST' });
-};
-
-const stopGame = async () => {
-  await fetch('http://127.0.0.1:8000/api/game/stop', { method: 'POST' });
-};
-
-const resetGame = async () => {
-  if(confirm("Czy na pewno zresetować stan wszystkich jednostek?")) {
-    await fetch('http://127.0.0.1:8000/api/game/reset', { method: 'POST' });
-  }
-};
-
-const respawnPlayer = async (devEui) => {
-  await fetch(`http://127.0.0.1:8000/api/game/respawn/${devEui}`, { method: 'POST' });
-};
 
 async function submitSpoof() {
   try {
@@ -257,23 +180,72 @@ async function submitSpoof() {
   } catch (e) { console.error(e) }
 }
 
-async function saveMatchConfig() {
+// --- FUNKCJE GRY ---
+async function setGameMode() {
   try {
-    await fetch('http://127.0.0.1:8000/api/game/setup', {
+    await fetch('http://127.0.0.1:8000/api/game/mode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        teams: tempTeams,
-        type: 'TDM'
-      })
+      body: JSON.stringify({ mode_id: sessionForm.value.mode_id })
     })
-    showAssignModal.value = false
-    alert("Konfiguracja zapisana pomyślnie!")
-  } catch (e) {
-    console.error("Błąd zapisu:", e)
-  }
+  } catch (e) { console.error(e) }
 }
 
+async function startGame() {
+  try {
+    await fetch('http://127.0.0.1:8000/api/game/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time_mins: sessionForm.value.time_mins })
+    })
+    gameTimeLeft.value = sessionForm.value.time_mins * 60
+    gameStatus.value = 'running'
+    gameTimer = setInterval(() => {
+      if (gameTimeLeft.value > 0) {
+        gameTimeLeft.value--
+      } else {
+        clearInterval(gameTimer)
+        gameStatus.value = 'stopped'
+      }
+    }, 1000)
+  } catch (e) { console.error(e) }
+}
+
+async function stopGame() {
+  try {
+    await fetch('http://127.0.0.1:8000/api/game/stop', { method: 'POST' })
+    if (gameTimer) clearInterval(gameTimer)
+    gameStatus.value = 'stopped'
+  } catch (e) { console.error(e) }
+}
+
+async function resetGame() {
+  try {
+    await fetch('http://127.0.0.1:8000/api/game/reset', { method: 'POST' })
+    if (gameTimer) clearInterval(gameTimer)
+    gameStatus.value = 'configuration'
+    gameTimeLeft.value = 0
+  } catch (e) { console.error(e) }
+}
+
+async function assignProfileAndTeam(devEui) {
+  const newProfile = profileAssignments.value[devEui]
+  const newTeam = teamAssignments.value[devEui]
+  try {
+    await Promise.all([
+      fetch(`http://127.0.0.1:8000/api/players/${devEui}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: newProfile })
+      }),
+      fetch(`http://127.0.0.1:8000/api/players/${devEui}/team`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ team: parseInt(newTeam) })
+      })
+    ])
+  } catch (e) { console.error(e) }
+}
 
 // --- CYKL ŻYCIA ---
 onMounted(() => {
@@ -285,13 +257,29 @@ onMounted(() => {
   socket.onclose = () => isConnected.value = false
 
   socket.onmessage = (event) => {
-    const msg = JSON.parse(event.data)
-    if (msg.type === "UPDATE_PLAYERS") {
-      players.value = msg.data
-    } else if (msg.type === "GAME_UPDATE") {
-      gameStatus.value = msg.data
+    try {
+      const msg = JSON.parse(event.data)
+      if (msg.type === "UPDATE_PLAYERS" && msg.data) {
+        players.value = msg.data
+
+        Object.keys(msg.data).forEach(devEui => {
+          if (profileAssignments.value[devEui] === undefined) {
+            profileAssignments.value[devEui] = msg.data[devEui].profile_id || ""
+          }
+          if (teamAssignments.value[devEui] === undefined) {
+            teamAssignments.value[devEui] = msg.data[devEui].team?.toString() || "0"
+          }
+        })
+
+        gameStatus.value = msg.game_status || gameStatus.value
+        gameTimeLeft.value = msg.time_left || gameTimeLeft.value
+      }
+    } catch (e) {
+      console.error("Błąd parsowania WS:", e)
     }
   }
+
+  fetchProfiles()
 })
 
 onUnmounted(() => {
@@ -309,81 +297,11 @@ h1 { color: #00ff00; text-transform: uppercase; letter-spacing: 2px; }
 .connection-status { padding: 5px 15px; border-radius: 3px; font-size: 0.8rem; margin: 10px 0; display: inline-block; border: 1px solid #444; }
 .connected { border-color: #00ff00; color: #00ff00; }
 
+.game-status { font-size: 0.9rem; margin: 10px 0; }
+
 .tabs button { background: #1a1a1a; border: 1px solid #333; color: #777; padding: 12px 25px; cursor: pointer; transition: 0.2s; }
 .tabs button.active { background: #222; color: #00ff00; border-bottom: 2px solid #00ff00; }
 
 .tab-pane { background: #111; border: 1px solid #222; padding: 20px; min-height: 60vh; }
-.tactical-table { width: 100%; border-collapse: collapse; }
-.tactical-table th { background: #1a1a1a; color: #00ff00; padding: 15px; text-align: left; }
-.tactical-table td { padding: 12px; border-bottom: 1px solid #222; }
-
-/* Statusy graczy */
-.status-alive { color: #00ff00; font-weight: bold; }
-.status-dead { color: #ff0000; font-weight: bold; text-decoration: line-through; }
-.dead-row { background: rgba(255, 0, 0, 0.05); }
-
-/* Przyciski */
-.btn-attack { background: #006400; color: white; border: none; padding: 10px 20px; cursor: pointer; }
-.btn-stop { background: #8b0000; color: white; border: none; padding: 10px 20px; cursor: pointer; }
-.btn-reset { background: #444; color: white; border: none; padding: 10px 20px; cursor: pointer; margin-left: 10px; }
-.btn-respawn { background: #0044ff; color: white; border: none; padding: 5px 10px; cursor: pointer; margin-right: 5px; }
-.btn-spoof { background: #6a1b9a; color: white; border: none; padding: 5px 10px; cursor: pointer; }
-
-/* Dashboard gry */
-.main-controls { display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; padding: 30px; border-radius: 5px; }
-.status-box { font-size: 1.5rem; font-weight: bold; color: #444; }
-.status-box.active { color: #00ff00; text-shadow: 0 0 10px rgba(0,255,0,0.5); }
-.stats-grid { display: flex; gap: 20px; margin-top: 20px; }
-.stat-card { background: #1a1a1a; padding: 20px; flex: 1; border-radius: 5px; text-align: center; border: 1px solid #333; }
-.stat-card.red { border-color: #8b0000; }
-.stat-card .value { font-size: 3rem; font-weight: bold; margin-top: 10px; }
-
-.mt-20 { margin-top: 20px; }
-
-
-
-.teams-assignment-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
-  gap: 20px;
-  margin-top: 20px;
-}
-
-.tag-assign-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #1a1a1a;
-  padding: 10px;
-  margin-bottom: 5px;
-  border: 1px solid #333;
-}
-
-.assign-buttons button {
-  padding: 5px 15px;
-  margin-left: 5px;
-  cursor: pointer;
-  background: #222;
-  border: 1px solid #444;
-  color: #888;
-}
-
-.active-red { background: #8b0000 !important; color: white !important; border-color: #ff4444 !important; }
-.active-blue { background: #00008b !important; color: white !important; border-color: #4444ff !important; }
-
-.mini-chip {
-  background: #222;
-  padding: 5px 10px;
-  border-radius: 4px;
-  margin: 2px;
-  display: inline-block;
-  font-size: 0.8rem;
-}
-
-.team-preview { background: #0f0f0f; border: 1px solid #333; padding: 15px; border-radius: 4px; }
-.red-theme { border-top: 4px solid #ff4444; }
-.blue-theme { border-top: 4px solid #4444ff; }
-
-
-
+.no-padding { padding: 0; }
 </style>

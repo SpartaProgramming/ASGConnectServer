@@ -1,0 +1,36 @@
+services:
+  backend:
+    build: #jak stworzyć obraz
+      context: . #pliki z bieżącego katalogu
+      dockerfile: Dockerfile.backend #plik z instrukcjami do stworzenia obrazu, przepis
+    container_name: asgconnect-backend #stała nazwa kontenera, łatwiejsze zarządzanie, debugowanie
+    ports:
+      - "8000:8000" #host:container, umożliwia dostęp do backendu z zewnątrz kontenera
+    environment:
+      - PYTHONUNBUFFERED=1 #bez buforowwania
+    volumes: #łączy katalog z kodem z kontenerem,
+      - ./backend:/app # zmiana w kodzie od razu widoczna, Bind Mount; /app roboczy folder; host:kontener
+    network_mode: "host"
+    command: python web_server.py #uruchamia skrypt backendu
+    extra_hosts:
+      - "chirpstack-pi:10.42.0.162"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: asgconnect-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules #zapobiega nadpisaniu node_modules (uzywaj tego zainstalowanego podczas budowania obrazu)
+    network_mode: "host"
+    environment:
+      - VITE_API_URL=http://localhost:8000 # adres backendu
+    command: npm run dev -- --host 0.0.0.0 # wystawia interfejs na zewnątrz kontenera (przeglądarka), uruchamia serwer deweloperski Vite
+    extra_hosts:
+      - "chirpstack-pi:10.42.0.162"
+networks:
+  asgconnect-network:
+    driver: bridge #docker tworzy wirtualny most

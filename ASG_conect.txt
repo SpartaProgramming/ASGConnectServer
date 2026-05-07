@@ -4,7 +4,7 @@
 ASGConnect to system zarządzania grami airsoft w czasie rzeczywistym, wykorzystujący urządzenia LoRaWAN (tagi). Backend (Python) obsługuje MQTT z ChirpStack, zarządza sesjami gry i automatycznie rejestruje graczy. Frontend (Vue.js) zapewnia dashboard dla sędziów. Kluczowe założenia: brak STOPU rozgrywki, cykliczne wysyłanie lokalizacji, serwer jako Single Source of Truth z Digital Twin.
 
 ## Etapy Gry
-1. **Przygotowanie**: Konfiguracja gry na serwerze (przypisywanie drużyn, nicków, czasu, trybu). Wyświetla: "KONFIGUROWANIE". Ustawia Game Status. *Confirmed*.
+1. **Przygotowanie**: Konfiguracja gry na serwerze (przypisywanie profilu do tagu, członków drużyn, nicków, czasu, trybu). Wyświetla: "KONFIGUROWANIE". Ustawia Game Status. *Confirmed*.
 2. **Czekaj na Gotowość**: Potwierdź READY z każdego taga. Komunikat o gotowości.
 3. **Gra**: Odliczanie czasu, aktualizacja ilości graczy, wysyłanie lokalizacji. Rozpoczyna się komendą START z serwera.
 4. **Koniec**: Awaryjne zatrzymanie, WIN/LOSE, koniec czasu. Wyświetla komunikat końcowy.
